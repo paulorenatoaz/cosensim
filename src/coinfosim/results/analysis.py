@@ -1,5 +1,5 @@
 """
-Post-processing analysis for CoInfoSim Sprint 1.
+Post-processing analysis for CoInfoSim Monte Carlo results.
 
 Two summaries are computed from a
 :class:`~coinfosim.results.accumulator.LossAccumulator`:
@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
+import math
 import pandas as pd
 
 from coinfosim.results.accumulator import LossAccumulator
@@ -49,6 +50,22 @@ class ThresholdResult:
     subset_a: Subset
     subset_b: Subset
     n_star: Optional[int]  # None when no threshold is observed
+
+
+@dataclass(frozen=True)
+class InterpolatedThresholdResult:
+    """Discrete and interpolated cooperative threshold for ``B`` over ``A``."""
+
+    classifier: str
+    subset_a: Subset
+    subset_b: Subset
+    n_star_grid: Optional[int]
+    n_star_interpolated: Optional[float]
+    n_before: Optional[int]
+    n_after: Optional[int]
+    delta_before: Optional[float]
+    delta_after: Optional[float]
+    status: str
 
 
 def best_subset(
@@ -130,6 +147,99 @@ def cooperative_threshold(
     )
 
 
+def cooperative_threshold_interpolated(
+    accumulator: LossAccumulator,
+    classifier_name: str,
+    subset_a: Subset,
+    subset_b: Subset,
+    sample_sizes: Sequence[int],
+) -> InterpolatedThresholdResult:
+    """Return grid and interpolated ``N*`` for cooperative subset ``B``.
+
+    Let ``Delta(n) = L_A(n) - L_B(n)``. The cooperative subset ``B`` strictly
+    beats ``A`` when ``Delta(n) > 0``. ``n_star_grid`` is the first evaluated
+    sample size where this happens. ``n_star_interpolated`` is linearly
+    interpolated between the last non-winning point and first winning point
+    when a crossing is observed.
+    """
+
+    a = tuple(subset_a)
+    b = tuple(subset_b)
+    sizes = sorted(int(n) for n in sample_sizes)
+    if not sizes:
+        raise ValueError("sample_sizes must be non-empty")
+
+    deltas = []
+    for n in sizes:
+        loss_a = accumulator.mean_loss(n, a, classifier_name)
+        loss_b = accumulator.mean_loss(n, b, classifier_name)
+        deltas.append(float(loss_a - loss_b))
+
+    first_delta = deltas[0]
+    if first_delta > 0:
+        return InterpolatedThresholdResult(
+            classifier=classifier_name,
+            subset_a=a,
+            subset_b=b,
+            n_star_grid=sizes[0],
+            n_star_interpolated=float(sizes[0]),
+            n_before=None,
+            n_after=sizes[0],
+            delta_before=None,
+            delta_after=first_delta,
+            status="left_censored",
+        )
+
+    for i in range(1, len(sizes)):
+        prev_delta = deltas[i - 1]
+        curr_delta = deltas[i]
+        if curr_delta > 0 and prev_delta <= 0:
+            interpolated = _interpolate_zero_crossing(
+                sizes[i - 1], prev_delta, sizes[i], curr_delta
+            )
+            status = "exact_zero" if math.isclose(prev_delta, 0.0, abs_tol=1e-15) else "interpolated"
+            return InterpolatedThresholdResult(
+                classifier=classifier_name,
+                subset_a=a,
+                subset_b=b,
+                n_star_grid=sizes[i],
+                n_star_interpolated=interpolated,
+                n_before=sizes[i - 1],
+                n_after=sizes[i],
+                delta_before=prev_delta,
+                delta_after=curr_delta,
+                status=status,
+            )
+
+    return InterpolatedThresholdResult(
+        classifier=classifier_name,
+        subset_a=a,
+        subset_b=b,
+        n_star_grid=None,
+        n_star_interpolated=None,
+        n_before=None,
+        n_after=None,
+        delta_before=None,
+        delta_after=None,
+        status="no_crossing",
+    )
+
+
+def _interpolate_zero_crossing(
+    n_before: int,
+    delta_before: float,
+    n_after: int,
+    delta_after: float,
+) -> float:
+    denominator = delta_after - delta_before
+    if math.isclose(denominator, 0.0, abs_tol=1e-15):
+        return float(n_after)
+    return float(
+        n_before
+        + ((0.0 - delta_before) / denominator) * (n_after - n_before)
+    )
+
+
 def _best_single_subset(
     accumulator: LossAccumulator,
     classifier_name: str,
@@ -186,7 +296,9 @@ def standard_threshold_comparisons(
         ]
 
         for name, a, b in comparisons:
-            result = cooperative_threshold(accumulator, clf, a, b, sample_sizes)
+            result = cooperative_threshold_interpolated(
+                accumulator, clf, a, b, sample_sizes
+            )
             rows.append(
                 {
                     "classifier": clf,
@@ -196,7 +308,14 @@ def standard_threshold_comparisons(
                     "subset_a_label": subset_label(a),
                     "subset_b": b,
                     "subset_b_label": subset_label(b),
-                    "n_star": result.n_star,
+                    "n_star": result.n_star_grid,
+                    "n_star_grid": result.n_star_grid,
+                    "n_star_interpolated": result.n_star_interpolated,
+                    "n_before": result.n_before,
+                    "n_after": result.n_after,
+                    "delta_before": result.delta_before,
+                    "delta_after": result.delta_after,
+                    "threshold_status": result.status,
                 }
             )
     return pd.DataFrame(rows)

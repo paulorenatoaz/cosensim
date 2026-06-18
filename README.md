@@ -4,7 +4,7 @@ CoInfoSim is a research simulator for evaluating **cooperative advantage among i
 
 CoInfoSim is a conceptual evolution of the earlier **SLACGS** and **CoSenSim** lines of work. It preserves their incremental Monte Carlo protocol, reproducible sample generation, adaptive repetition logic, and scenario-based reporting structure, while reformulating the scientific object from sensor-network dimensionality to multi-channel classification.
 
-> **Status:** Early-stage research project under active development. This repository currently describes the CoInfoSim research direction and prepares the codebase for it. The new samplers, Monte Carlo loop, dataset-anchored pipeline, cost-aware optimization, and automated report engine described below are **planned architecture**, not yet implemented. The functional code inherited from SLACGS/CoSenSim remains available under the `coinfosim` package while the reformulation proceeds.
+> **Status:** Early-stage research project under active development. Sprint 1 introduced the new Gaussian sampler and cooperative Monte Carlo loop. Sprint 2 adds a first dataset-anchored Occupancy Detection scenario with real-data and Gaussian-anchored Monte Carlo reports. Broader dataset grids, cost-aware optimization, and publication workflows remain future work.
 
 ## Core research question
 
@@ -190,6 +190,33 @@ coinfosim --help
 
 The simulator API and command set are being reformulated for the CoInfoSim research direction; current commands reflect the inherited implementation and will evolve as the phases above are implemented.
 
+## Sprint 2 Occupancy scenario
+
+Sprint 2 implements an Occupancy Detection real-data anchored smoke scenario. Place the UCI raw files at:
+
+```text
+data/raw/occupancy/datatraining.txt
+data/raw/occupancy/datatest.txt
+data/raw/occupancy/datatest2.txt
+```
+
+Run the smoke scenario with:
+
+```bash
+.venv/bin/python scripts/run_occupancy_scenario.py --mode smoke
+```
+
+Smoke mode evaluates `n_per_class = [1, 2, 4, 8, 16, 32]`, all 31 non-empty subsets of Temperature, Humidity, Light, CO2, and HumidityRatio, and the three Sprint classifiers: Linear SVM, Logistic Regression, and Gaussian Naive Bayes. The command generates:
+
+```text
+output/reports/occupancy_scenario_report.html
+output/reports/occupancy_dataset_report.html
+output/reports/occupancy_real_monte_carlo_report.html
+output/reports/occupancy_gaussian_anchored_monte_carlo_report.html
+```
+
+Fast mode evaluates `n_per_class = [1, 2, 4, 8, 16, 32, 64, 128]`. Full mode is defined in code through `512` but should not be run for Sprint 2 local validation unless explicitly requested.
+
 ## Citation
 
 If you use CoInfoSim in published research, please cite this repository. See [CITATION.cff](CITATION.cff).
@@ -207,6 +234,4 @@ CoInfoSim is distributed under the GNU General Public License v3.0 (GPL-3.0), in
 ## Follow-up
 
 - The GitHub repository is still named `cosensim`; renaming it to `coinfosim` is an external GitHub operation. After renaming, update the `origin` remote URL locally.
-- The new simulator logic (samplers, dataset-anchored pipeline, Gaussian-anchored simulation, reformulated Monte Carlo loop, cost-aware optimization, automated HTML reports, and scenario-grid execution) is planned and not implemented in this task.
-
-
+- The new simulator logic, Occupancy dataset-anchored pipeline, Gaussian-anchored simulation, reformulated Monte Carlo loop, and Sprint 2 HTML reports now have an initial implementation. Cost-aware optimization, broader dataset grids, and publication automation remain planned follow-up work.

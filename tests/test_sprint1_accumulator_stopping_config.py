@@ -100,6 +100,22 @@ def test_valid_modes_constant():
     assert set(VALID_MODES) == {"smoke", "fast", "full"}
 
 
+def test_sprint2_mode_sample_sizes_and_smoke_budget():
+    smoke = get_mode_config("smoke")
+    fast = get_mode_config("fast")
+    full = get_mode_config("full")
+
+    assert smoke.sample_sizes == (1, 2, 4, 8, 16, 32)
+    assert fast.sample_sizes == (1, 2, 4, 8, 16, 32, 64, 128)
+    assert full.sample_sizes == (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)
+
+    assert smoke.min_replications == 10
+    assert smoke.max_replications == 40
+    assert smoke.replication_batch_size == 5
+    assert smoke.test_samples_per_class == 200
+    assert smoke.ci_half_width_target == 0.05
+
+
 def test_get_mode_config_invalid():
     with pytest.raises(ValueError):
         get_mode_config("turbo")

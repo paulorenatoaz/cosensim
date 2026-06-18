@@ -1,7 +1,7 @@
 """
-Cooperative Monte Carlo simulator for CoInfoSim Sprint 1.
+Cooperative Monte Carlo simulator for CoInfoSim.
 
-:class:`CooperativeMonteCarloSimulator` runs the Sprint 1 experiment loop::
+:class:`CooperativeMonteCarloSimulator` runs the experiment loop::
 
     n_per_class -> replication -> subset -> classifier
 
@@ -17,11 +17,12 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Tuple
 
 from coinfosim.classifiers.registry import available_classifiers, make_classifier
 from coinfosim.models.gaussian import GaussianSimulationModel
 from coinfosim.results.accumulator import LossAccumulator
+from coinfosim.samplers.dataset import Dataset
 from coinfosim.samplers.gaussian import GaussianClassConditionalSampler
 from coinfosim.simulation.config import MonteCarloConfig
 from coinfosim.simulation.metrics import empirical_test_loss
@@ -43,7 +44,7 @@ class StoppingInfo:
 class SimulationResult:
     """Structured result returned by the cooperative Monte Carlo simulator."""
 
-    model: GaussianSimulationModel
+    model: Any
     config: MonteCarloConfig
     subsets: List[Tuple[int, ...]]
     classifier_names: List[str]
@@ -57,20 +58,36 @@ class SimulationResult:
         return list(self.config.sample_sizes)
 
 
+class MonteCarloSampler(Protocol):
+    """Sampler interface required by :class:`CooperativeMonteCarloSimulator`."""
+
+    @property
+    def model(self) -> Any:
+        ...
+
+    def sample_train(self, n_per_class: int, replication_id: int) -> Dataset:
+        ...
+
+    def sample_test(self) -> Dataset:
+        ...
+
+
 class CooperativeMonteCarloSimulator:
-    """Run the Sprint 1 cooperative Monte Carlo experiment."""
+    """Run a cooperative Monte Carlo experiment over subsets and classifiers."""
 
     def __init__(
         self,
-        model: GaussianSimulationModel,
+        model: Any,
         config: MonteCarloConfig,
         subsets: Optional[Sequence[Sequence[int]]] = None,
         classifier_names: Optional[Sequence[str]] = None,
         stopping_rule: Optional[StandardErrorStoppingRule] = None,
-        sampler: Optional[GaussianClassConditionalSampler] = None,
+        sampler: Optional[MonteCarloSampler] = None,
+        metadata: Optional[Mapping[str, object]] = None,
     ) -> None:
         self.model = model
         self.config = config
+        self.extra_metadata = dict(metadata or {})
 
         if subsets is None:
             subsets = all_nonempty_subsets(model.d)
@@ -156,10 +173,12 @@ class CooperativeMonteCarloSimulator:
 
         runtime = time.time() - start
 
+        channel_names = getattr(self.model, "channel_names", None)
         metadata = {
             "mode": self.config.mode,
             "base_seed": self.config.base_seed,
             "test_samples_per_class": self.config.test_samples_per_class,
+            "fixed_test_size": test_dataset.n_samples,
             "ci_half_width_target": self.config.ci_half_width_target,
             "min_replications": self.config.min_replications,
             "max_replications": self.config.max_replications,
@@ -168,6 +187,12 @@ class CooperativeMonteCarloSimulator:
             "d": self.model.d,
             "class_labels": list(self.model.class_labels),
         }
+        if channel_names is not None:
+            metadata["channel_names"] = list(channel_names)
+        model_name = getattr(self.model, "name", None)
+        if model_name is not None:
+            metadata["model_name"] = model_name
+        metadata.update(self.extra_metadata)
 
         return SimulationResult(
             model=self.model,

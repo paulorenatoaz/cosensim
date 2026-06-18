@@ -1,5 +1,5 @@
 """
-Monte Carlo budget and execution-mode configuration for CoInfoSim Sprint 1.
+Monte Carlo budget and execution-mode configuration for CoInfoSim.
 
 Provides :class:`MonteCarloConfig` and :func:`get_mode_config` for the
 ``smoke``, ``fast``, and ``full`` execution modes.
@@ -7,7 +7,7 @@ Provides :class:`MonteCarloConfig` and :func:`get_mode_config` for the
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Tuple
 
 
@@ -64,16 +64,16 @@ class MonteCarloConfig:
 # Preset definitions for each execution mode.
 _MODE_PRESETS: Dict[str, dict] = {
     "smoke": dict(
-        sample_sizes=(2, 4, 8),
-        min_replications=5,
-        max_replications=20,
+        sample_sizes=(1, 2, 4, 8, 16, 32),
+        min_replications=10,
+        max_replications=40,
         replication_batch_size=5,
         test_samples_per_class=200,
         ci_half_width_target=0.05,
         base_seed=0,
     ),
     "fast": dict(
-        sample_sizes=(2, 4, 8, 16, 32, 64),
+        sample_sizes=(1, 2, 4, 8, 16, 32, 64, 128),
         min_replications=30,
         max_replications=300,
         replication_batch_size=10,
@@ -82,7 +82,7 @@ _MODE_PRESETS: Dict[str, dict] = {
         base_seed=0,
     ),
     "full": dict(
-        sample_sizes=(2, 4, 8, 16, 32, 64, 128, 256, 512),
+        sample_sizes=(1, 2, 4, 8, 16, 32, 64, 128, 256, 512),
         min_replications=100,
         max_replications=2000,
         replication_batch_size=20,
